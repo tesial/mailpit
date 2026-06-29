@@ -2,11 +2,33 @@
 package auth
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/tg123/go-htpasswd"
 )
+
+// contextKey is a private type for context keys defined in this package.
+type contextKey int
+
+const (
+	// AuthUsernameKey is the context key used to store the authenticated HTTP username.
+	AuthUsernameKey contextKey = iota
+)
+
+// GetRequestUsername returns the authenticated HTTP username stored in the request context.
+// Returns an empty string when no user is authenticated or when the user is an admin.
+func GetRequestUsername(r *http.Request) string {
+	username, _ := r.Context().Value(AuthUsernameKey).(string)
+	return username
+}
+
+// IsUIAdminUser reports whether the given username is exempt from tag-based filtering.
+func IsUIAdminUser(username string) bool {
+	_, ok := UIAdminUsers[strings.ToLower(username)]
+	return ok
+}
 
 var (
 	// UICredentials passwords
@@ -17,6 +39,8 @@ var (
 	SMTPCredentials *htpasswd.File
 	// POP3Credentials passwords
 	POP3Credentials *htpasswd.File
+	// UIAdminUsers is the set of usernames exempt from tag-based filtering
+	UIAdminUsers = map[string]struct{}{}
 )
 
 // SetUIAuth will set Basic Auth credentials required for the UI & API

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/axllent/mailpit/config"
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/logger"
 	"github.com/axllent/mailpit/internal/shortuuid"
 	"github.com/axllent/mailpit/internal/tools"
@@ -212,13 +213,24 @@ func Store(body *[]byte, username *string) (string, error) {
 
 // List returns a subset of messages from the mailbox,
 // sorted latest to oldest
-func List(start int, beforeTS int64, limit int) ([]MessageSummary, error) {
+// List returns paginated messages.
+// An optional tagFilter limits results to messages that have the specified tag.
+func List(start int, beforeTS int64, limit int, tagFilter ...string) ([]MessageSummary, error) {
 	results := []MessageSummary{}
 	tsStart := time.Now()
+
+	tag := ""
+	if len(tagFilter) > 0 {
+		tag = tagFilter[0]
+	}
 
 	q := sqlf.From(tenant("mailbox") + " m").
 		Select(`m.Created, m.ID, m.MessageID, m.Subject, m.Metadata, m.Size, m.Attachments, m.Read, m.Snippet`).
 		OrderBy("m.Created DESC")
+
+	if tag != "" {
+		q = q.Where(`m.ID IN (SELECT mt.ID FROM `+tenant("message_tags")+` mt JOIN `+tenant("tags")+` t ON mt.TagID = t.ID WHERE t.Name = ?)`, tag)
+	}
 
 	if limit > 0 {
 		q = q.Limit(limit).Offset(start)
@@ -538,14 +550,15 @@ func LatestID(r *http.Request) (string, error) {
 	var messages []MessageSummary
 	var err error
 
+	tag := auth.GetRequestUsername(r)
 	search := strings.TrimSpace(r.URL.Query().Get("query"))
 	if search != "" {
-		messages, _, err = Search(search, r.URL.Query().Get("tz"), 0, 0, 1)
+		messages, _, err = Search(search, r.URL.Query().Get("tz"), 0, 0, 1, tag)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		messages, err = List(0, 0, 1)
+		messages, err = List(0, 0, 1, tag)
 		if err != nil {
 			return "", err
 		}
@@ -557,8 +570,27 @@ func LatestID(r *http.Request) (string, error) {
 	return messages[0].ID, nil
 }
 
+// MessageHasTag returns true when the message with the given ID carries the specified tag.
+// Returns true when tag is empty (no filtering required).
+func MessageHasTag(id, tag string) bool {
+	if tag == "" {
+		return true
+	}
+	var count float64
+	_ = sqlf.From(tenant("message_tags")+" mt").
+		Select("COUNT(*)").To(&count).
+		Join(tenant("tags")+" t", "mt.TagID = t.ID").
+		Where("mt.ID = ?", id).
+		Where("t.Name = ?", tag).
+		QueryRowAndClose(context.TODO(), db)
+	return count > 0
+}
+
 // MarkRead will mark a message as read
-func MarkRead(ids []string) error {
+func MarkRead(ids []string, tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		ids = FilterIDsByTag(ids, tagFilter[0])
+	}
 	if len(ids) == 0 {
 		return nil
 	}
@@ -613,7 +645,10 @@ func MarkRead(ids []string) error {
 }
 
 // MarkUnread will mark a message as unread
-func MarkUnread(ids []string) error {
+func MarkUnread(ids []string, tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		ids = FilterIDsByTag(ids, tagFilter[0])
+	}
 	if len(ids) == 0 {
 		return nil
 	}
@@ -670,7 +705,11 @@ func MarkUnread(ids []string) error {
 }
 
 // MarkAllRead will mark all messages as read
-func MarkAllRead() error {
+func MarkAllRead(tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		return SetSearchReadStatus("tag:"+tagFilter[0], "", true)
+	}
+
 	var (
 		start = time.Now()
 		total = CountUnread()
@@ -695,7 +734,11 @@ func MarkAllRead() error {
 }
 
 // MarkAllUnread will mark all messages as unread
-func MarkAllUnread() error {
+func MarkAllUnread(tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		return SetSearchReadStatus("tag:"+tagFilter[0], "", false)
+	}
+
 	var (
 		start = time.Now()
 		total = CountRead()
@@ -719,8 +762,12 @@ func MarkAllUnread() error {
 	return nil
 }
 
-// DeleteMessages deletes one or more messages in bulk
-func DeleteMessages(ids []string) error {
+// DeleteMessages deletes one or more messages in bulk.
+// An optional tagFilter restricts deletion to messages that carry the specified tag.
+func DeleteMessages(ids []string, tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		ids = FilterIDsByTag(ids, tagFilter[0])
+	}
 	if len(ids) == 0 {
 		return nil
 	}
@@ -817,8 +864,13 @@ func DeleteMessages(ids []string) error {
 	return nil
 }
 
-// DeleteAllMessages will delete all messages from a mailbox
-func DeleteAllMessages() error {
+// DeleteAllMessages will delete all messages from a mailbox.
+// An optional tagFilter restricts deletion to messages carrying the specified tag.
+func DeleteAllMessages(tagFilter ...string) error {
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		return DeleteSearch("tag:"+tagFilter[0], "")
+	}
+
 	var (
 		start = time.Now()
 		total int

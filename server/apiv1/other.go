@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/axllent/mailpit/config"
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/htmlcheck"
 	"github.com/axllent/mailpit/internal/linkcheck"
 	"github.com/axllent/mailpit/internal/spamassassin"
@@ -34,6 +35,7 @@ func HTMLCheck(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 
 	if id == "latest" {
@@ -43,6 +45,11 @@ func HTMLCheck(w http.ResponseWriter, r *http.Request) {
 			fourOFour(w)
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	raw, err := storage.GetMessageRaw(id)
@@ -103,6 +110,7 @@ func LinkCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 
 	if id == "latest" {
@@ -112,6 +120,11 @@ func LinkCheck(w http.ResponseWriter, r *http.Request) {
 			fourOFour(w)
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	msg, err := storage.GetMessage(id)
@@ -155,6 +168,7 @@ func SpamAssassinCheck(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 
 	if id == "latest" {
@@ -165,6 +179,11 @@ func SpamAssassinCheck(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, err.Error())
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	msg, err := storage.GetMessageRaw(id)

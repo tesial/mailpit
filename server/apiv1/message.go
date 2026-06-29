@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/url"
 
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/storage"
 )
 
@@ -31,6 +32,7 @@ func GetMessage(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 
 	if id == "latest" {
@@ -41,6 +43,11 @@ func GetMessage(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, err.Error())
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	msg, err := storage.GetMessage(id)
@@ -75,6 +82,7 @@ func GetHeaders(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 
 	if id == "latest" {
@@ -85,6 +93,11 @@ func GetHeaders(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, err.Error())
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	data, err := storage.GetMessageRaw(id)
@@ -128,6 +141,7 @@ func DownloadAttachment(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 	partID := r.PathValue("partID")
 
@@ -139,6 +153,11 @@ func DownloadAttachment(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, err.Error())
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	a, err := storage.GetAttachmentPart(id, partID)
@@ -176,6 +195,7 @@ func DownloadRaw(w http.ResponseWriter, r *http.Request) {
 	//    400: ErrorResponse
 	//    404: NotFoundResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 	dl := r.FormValue("dl")
 
@@ -187,6 +207,11 @@ func DownloadRaw(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, err.Error())
 			return
 		}
+	}
+
+	if !storage.MessageHasTag(id, tag) {
+		fourOFour(w)
+		return
 	}
 
 	data, err := storage.GetMessageRaw(id)

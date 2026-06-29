@@ -27,6 +27,7 @@ export default {
 		// load global config
 		this.get(this.resolve("/api/v1/webui"), false, (response) => {
 			mailbox.uiConfig = response.data;
+			mailbox.authUser = response.data.AuthUser || "";
 
 			if (mailbox.uiConfig.Label) {
 				document.title = document.title + " - " + mailbox.uiConfig.Label;

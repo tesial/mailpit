@@ -58,32 +58,39 @@ export default {
 
 				// new messages
 				if (response.Type === "new" && response.Data) {
-					this.eventBus.emit("new", response.Data);
+					// If a tag filter is active, only process messages that carry the user's tag
+					const userTag = mailbox.authUser ? mailbox.authUser.toLowerCase() : "";
+					const msgTags = (response.Data.Tags || []).map((t) => t.toLowerCase());
+					if (userTag && !msgTags.includes(userTag)) {
+						// message doesn't belong to this user — ignore
+					} else {
+						this.eventBus.emit("new", response.Data);
 
-					for (const i in response.Data.Tags) {
-						if (
-							mailbox.tags.findIndex((e) => {
-								return e.toLowerCase() === response.Data.Tags[i].toLowerCase();
-							}) < 0
-						) {
-							mailbox.tags.push(response.Data.Tags[i]);
-							mailbox.tags.sort((a, b) => {
-								return a.toLowerCase().localeCompare(b.toLowerCase());
-							});
+						for (const i in response.Data.Tags) {
+							if (
+								mailbox.tags.findIndex((e) => {
+									return e.toLowerCase() === response.Data.Tags[i].toLowerCase();
+								}) < 0
+							) {
+								mailbox.tags.push(response.Data.Tags[i]);
+								mailbox.tags.sort((a, b) => {
+									return a.toLowerCase().localeCompare(b.toLowerCase());
+								});
+							}
 						}
-					}
 
-					// send notifications
-					if (!this.pauseNotifications) {
-						this.pauseNotifications = true;
-						const from = response.Data.From !== null ? response.Data.From.Address : "[unknown]";
-						const subject = String(response.Data.Subject ?? "").substring(0, 100);
-						this.browserNotify("New mail from: " + from, subject);
-						this.setMessageToast(response.Data);
-						// delay notifications by 2s
-						window.setTimeout(() => {
-							this.pauseNotifications = false;
-						}, 2000);
+						// send notifications
+						if (!this.pauseNotifications) {
+							this.pauseNotifications = true;
+							const from = response.Data.From !== null ? response.Data.From.Address : "[unknown]";
+							const subject = String(response.Data.Subject ?? "").substring(0, 100);
+							this.browserNotify("New mail from: " + from, subject);
+							this.setMessageToast(response.Data);
+							// delay notifications by 2s
+							window.setTimeout(() => {
+								this.pauseNotifications = false;
+							}, 2000);
+						}
 					}
 				} else if (response.Type === "prune") {
 					// messages have been deleted, reload messages to adjust
@@ -94,13 +101,20 @@ export default {
 					}, 500);
 					this.eventBus.emit("prune");
 				} else if (response.Type === "stats" && response.Data) {
-					// refresh mailbox stats
-					mailbox.total = response.Data.Total;
-					mailbox.unread = response.Data.Unread;
-
 					// detect version updated, refresh is needed
 					if (this.version !== response.Data.Version) {
 						location.reload();
+					}
+
+					if (mailbox.authUser) {
+						// stats are global — trigger an API refresh to get per-user counts
+						mailbox.refresh = true;
+						window.setTimeout(() => {
+							mailbox.refresh = false;
+						}, 500);
+					} else {
+						mailbox.total = response.Data.Total;
+						mailbox.unread = response.Data.Unread;
 					}
 				} else if (response.Type === "delete" && response.Data) {
 					// broadcast for components

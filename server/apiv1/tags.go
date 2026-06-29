@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/storage"
 	"github.com/axllent/mailpit/server/websockets"
 )
 
 // GetAllTags (method: GET) will get all tags currently in use
-func GetAllTags(w http.ResponseWriter, _ *http.Request) {
+func GetAllTags(w http.ResponseWriter, r *http.Request) {
 	// swagger:route GET /api/v1/tags tags GetAllTags
 	//
 	// # Get all current tags
@@ -25,8 +26,10 @@ func GetAllTags(w http.ResponseWriter, _ *http.Request) {
 	//	  200: ArrayResponse
 	//    400: ErrorResponse
 
+	tag := auth.GetRequestUsername(r)
+
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(storage.GetAllTags()); err != nil {
+	if err := json.NewEncoder(w).Encode(storage.GetAllTags(tag)); err != nil {
 		httpError(w, err.Error())
 	}
 }
@@ -51,6 +54,8 @@ func SetMessageTags(w http.ResponseWriter, r *http.Request) {
 	//	  200: OKResponse
 	//    400: ErrorResponse
 
+	tag := auth.GetRequestUsername(r)
+
 	decoder := json.NewDecoder(r.Body)
 
 	var data struct {
@@ -68,6 +73,9 @@ func SetMessageTags(w http.ResponseWriter, r *http.Request) {
 
 	if len(ids) > 0 {
 		for _, id := range ids {
+			if !storage.MessageHasTag(id, tag) {
+				continue
+			}
 			if _, err := storage.SetMessageTags(id, data.Tags); err != nil {
 				httpError(w, err.Error())
 				return
@@ -95,6 +103,12 @@ func RenameTag(w http.ResponseWriter, r *http.Request) {
 	//	Responses:
 	//	  200: OKResponse
 	//    400: ErrorResponse
+
+	// Tag rename/delete are admin-only operations; deny when a user tag filter is active.
+	if auth.GetRequestUsername(r) != "" {
+		httpError(w, "not permitted")
+		return
+	}
 
 	tag := r.PathValue("tag")
 
@@ -137,6 +151,12 @@ func DeleteTag(w http.ResponseWriter, r *http.Request) {
 	//	Responses:
 	//	  200: OKResponse
 	//    400: ErrorResponse
+
+	// Tag rename/delete are admin-only operations; deny when a user tag filter is active.
+	if auth.GetRequestUsername(r) != "" {
+		httpError(w, "not permitted")
+		return
+	}
 
 	tag := r.PathValue("tag")
 

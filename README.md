@@ -116,6 +116,65 @@ Mailpit's SMTP server (default on port 1025), so you will likely need to configu
 A common MTA (Mail Transfer Agent) that delivers system emails to an SMTP server is `sendmail`, used by many applications, including PHP. 
 Mailpit can also act as substitute for sendmail. For instructions on how to set this up, please refer to the [sendmail documentation](https://mailpit.axllent.org/docs/install/sendmail/).
 
+
+
+# TESIAL
+
+## User-scoped filtering (multi-user inboxes)
+
+When HTTP basic authentication is enabled, Mailpit can restrict each user to only the messages tagged with their username — turning a single shared instance into isolated per-user inboxes. Every operation (listing, searching, deleting, marking as read) is automatically scoped: a user cannot see or touch messages that do not carry their tag.
+
+Admin users designated with `--ui-admin-users` bypass all filtering and have full visibility over the entire mailbox.
+
+### Tagging strategies
+
+Messages need to carry the user's username as a tag to be visible to that user. There are two natural ways to achieve this, and they can be combined:
+
+**SMTP authentication + `--tags-username`**
+
+Each SMTP client authenticates with its own username. Mailpit automatically tags every incoming message with that username.
+
+**Plus addressing**
+
+Senders use a shared address with a `+username` suffix (e.g. `support+lambda@tesial.be`). Mailpit extracts the `+` part and creates the tag automatically — no SMTP authentication required on the sender side.
+
+### Example: shared support inbox
+
+A typical setup with a shared address `support@tesial.be`, several services sending authenticated SMTP, and plus addressing as a fallback for external senders:
+
+```
+App "lambda"  ─── SMTP auth "lambda"  ──▶ ┌─────────────────────────┐
+App "invoice" ─── SMTP auth "invoice" ──▶ │                         │
+                                           │         Mailpit         │
+External mail ─── to support+billing@  ──▶ │                         │
+                      tesial.be            └─────────────────────────┘
+                                                     │
+                                    ┌────────────────┼────────────────┐
+                                    ▼                ▼                ▼
+                              admin login      lambda login     invoice login
+                              (sees all)    (tag "lambda"     (tag "invoice"
+                                               only)              only)
+```
+
+Start Mailpit with:
+
+```sh
+mailpit \
+  --ui-auth-file   /etc/mailpit/ui.htpasswd   \  # web UI logins
+  --smtp-auth-file /etc/mailpit/smtp.htpasswd \  # SMTP logins
+  --tags-username                              \  # auto-tag with SMTP username
+  --ui-admin-users admin                          # "admin" bypasses tag filter
+```
+
+| What arrives | How it gets tagged | Who sees it |
+|---|---|---|
+| SMTP from app authenticating as `lambda` | Tagged `lambda` automatically | `lambda` and `admin` |
+| SMTP from app authenticating as `invoice` | Tagged `invoice` automatically | `invoice` and `admin` |
+| Email to `support+billing@tesial.be` | Tagged `billing` via plus addressing | `billing` and `admin` |
+| Email to `support@tesial.be` (no tag) | Not tagged | `admin` only |
+
+> **Tip:** plus addressing and SMTP auth can coexist. Any message tagged `lambda` — however that tag was created — is visible to the `lambda` user.
+
 ---
 
 <p align="center">

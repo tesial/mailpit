@@ -160,10 +160,34 @@ func deleteMessageTag(id, name string) error {
 	return pruneUnusedTags()
 }
 
-// GetAllTags returns all used tags
-func GetAllTags() []string {
+// GetAllTags returns all used tags.
+// An optional tagFilter scopes the result to tags appearing on messages that also carry the specified tag.
+func GetAllTags(tagFilter ...string) []string {
 	var tags = []string{}
 	var name string
+
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		tag := tagFilter[0]
+		// Return only tags that appear on messages which also have the filter tag.
+		query := fmt.Sprintf(
+			`SELECT DISTINCT t.Name FROM %s t JOIN %s mt ON t.ID = mt.TagID WHERE mt.ID IN (SELECT mt2.ID FROM %s mt2 JOIN %s t2 ON mt2.TagID = t2.ID WHERE t2.Name = ?) ORDER BY t.Name`,
+			tenant("tags"), tenant("message_tags"), tenant("message_tags"), tenant("tags"),
+		) // #nosec
+		rows, err := db.Query(query, tag)
+		if err != nil {
+			logger.Log().Errorf("[db] GetAllTags: %s", err.Error())
+			return tags
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			if err := rows.Scan(&name); err != nil {
+				logger.Log().Errorf("[db] GetAllTags: %s", err.Error())
+				return tags
+			}
+			tags = append(tags, name)
+		}
+		return tags
+	}
 
 	if err := sqlf.
 		Select(`DISTINCT Name`).

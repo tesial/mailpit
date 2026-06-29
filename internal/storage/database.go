@@ -190,12 +190,18 @@ func Ping() error {
 	return db.Ping()
 }
 
-// StatsGet returns the total/unread statistics for a mailbox
-func StatsGet() MailboxStats {
+// StatsGet returns the total/unread statistics for a mailbox.
+// An optional tagFilter scopes the stats to messages that have the specified tag.
+func StatsGet(tagFilter ...string) MailboxStats {
+	tag := ""
+	if len(tagFilter) > 0 {
+		tag = tagFilter[0]
+	}
+
 	var (
-		total  = CountTotal()
-		unread = CountUnread()
-		tags   = GetAllTags()
+		total  = CountTotal(tag)
+		unread = CountUnread(tag)
+		tags   = GetAllTags(tag)
 	)
 
 	dbLastAction = time.Now()
@@ -207,39 +213,82 @@ func StatsGet() MailboxStats {
 	}
 }
 
-// CountTotal returns the number of emails in the database
-func CountTotal() uint64 {
+// CountTotal returns the number of emails in the database.
+// An optional tagFilter limits the count to messages with the specified tag.
+func CountTotal(tagFilter ...string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
-		Select("COUNT(*)").To(&total).
-		QueryRowAndClose(context.TODO(), db)
+	q := sqlf.From(tenant("mailbox")).Select("COUNT(*)").To(&total)
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		q = q.Where(`ID IN (SELECT mt.ID FROM `+tenant("message_tags")+` mt JOIN `+tenant("tags")+` t ON mt.TagID = t.ID WHERE t.Name = ?)`, tagFilter[0])
+	}
+	_ = q.QueryRowAndClose(context.TODO(), db)
 
 	return uint64(total)
 }
 
-// CountUnread returns the number of emails in the database that are unread.
-func CountUnread() uint64 {
+// CountUnread returns the number of unread emails in the database.
+// An optional tagFilter limits the count to messages with the specified tag.
+func CountUnread(tagFilter ...string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
-		Select("COUNT(*)").To(&total).
-		Where("Read = ?", 0).
-		QueryRowAndClose(context.TODO(), db)
+	q := sqlf.From(tenant("mailbox")).Select("COUNT(*)").To(&total).Where("Read = ?", 0)
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		q = q.Where(`ID IN (SELECT mt.ID FROM `+tenant("message_tags")+` mt JOIN `+tenant("tags")+` t ON mt.TagID = t.ID WHERE t.Name = ?)`, tagFilter[0])
+	}
+	_ = q.QueryRowAndClose(context.TODO(), db)
 
 	return uint64(total)
 }
 
-// CountRead returns the number of emails in the database that are read.
-func CountRead() uint64 {
+// CountRead returns the number of read emails in the database.
+// An optional tagFilter limits the count to messages with the specified tag.
+func CountRead(tagFilter ...string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
-		Select("COUNT(*)").To(&total).
-		Where("Read = ?", 1).
-		QueryRowAndClose(context.TODO(), db)
+	q := sqlf.From(tenant("mailbox")).Select("COUNT(*)").To(&total).Where("Read = ?", 1)
+	if len(tagFilter) > 0 && tagFilter[0] != "" {
+		q = q.Where(`ID IN (SELECT mt.ID FROM `+tenant("message_tags")+` mt JOIN `+tenant("tags")+` t ON mt.TagID = t.ID WHERE t.Name = ?)`, tagFilter[0])
+	}
+	_ = q.QueryRowAndClose(context.TODO(), db)
 
 	return uint64(total)
+}
+
+// FilterIDsByTag returns the subset of the given IDs whose messages carry the specified tag.
+func FilterIDsByTag(ids []string, tag string) []string {
+	if tag == "" || len(ids) == 0 {
+		return ids
+	}
+
+	args := make([]any, len(ids)+1)
+	for i, id := range ids {
+		args[i] = id
+	}
+	args[len(ids)] = tag
+
+	query := fmt.Sprintf(
+		`SELECT ID FROM %s WHERE ID IN (?%s) AND ID IN (SELECT mt.ID FROM %s mt JOIN %s t ON mt.TagID = t.ID WHERE t.Name = ?)`,
+		tenant("mailbox"), strings.Repeat(",?", len(ids)-1), tenant("message_tags"), tenant("tags"),
+	) // #nosec
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logger.Log().Errorf("[db] FilterIDsByTag: %s", err.Error())
+		return []string{}
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return result
+		}
+		result = append(result, id)
+	}
+
+	return result
 }
 
 // DbSize returns the size of the SQLite database.

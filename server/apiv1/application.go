@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/axllent/mailpit/config"
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/smtpd/chaos"
 	"github.com/axllent/mailpit/internal/stats"
 )
@@ -34,7 +35,7 @@ func AppInfo(w http.ResponseWriter, _ *http.Request) {
 }
 
 // WebUIConfig returns configuration settings for the web UI.
-func WebUIConfig(w http.ResponseWriter, _ *http.Request) {
+func WebUIConfig(w http.ResponseWriter, r *http.Request) {
 	// swagger:route GET /api/v1/webui application WebUIConfigurationResponse
 	//
 	// # Get web UI configuration
@@ -71,6 +72,7 @@ func WebUIConfig(w http.ResponseWriter, _ *http.Request) {
 	conf.Body.ChaosEnabled = chaos.Enabled
 	conf.Body.DuplicatesIgnored = config.IgnoreDuplicateIDs
 	conf.Body.HideDeleteAllButton = config.HideDeleteAllButton
+	conf.Body.AuthUser = auth.GetRequestUsername(r)
 
 	w.Header().Add("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(conf.Body); err != nil {

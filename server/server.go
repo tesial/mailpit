@@ -345,6 +345,11 @@ func middleWareFunc(fn http.HandlerFunc) http.HandlerFunc {
 				basicAuthResponse(w)
 				return
 			}
+			// Store the authenticated username in context so handlers can scope access by tag.
+			// Admin users bypass tag filtering (no username stored → empty tag filter).
+			if !auth.IsUIAdminUser(user) {
+				r = r.WithContext(context.WithValue(r.Context(), auth.AuthUsernameKey, user))
+			}
 		}
 
 		// WebSocket upgrade requests must not be wrapped in a gzip writer:

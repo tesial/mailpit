@@ -91,6 +91,9 @@ type WebUIConfiguration struct {
 
 	// Whether the delete button should be hidden
 	HideDeleteAllButton bool
+
+	// The authenticated username, empty if unauthenticated or admin (no tag filter applied)
+	AuthUser string
 }
 
 // Web UI configuration response

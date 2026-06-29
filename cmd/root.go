@@ -19,6 +19,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// uiAdminUsersFlag is a temporary holder for the --ui-admin-users flag value
+var uiAdminUsersFlag []string
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "mailpit",
@@ -103,6 +106,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&config.HTTPListen, "listen", "l", config.HTTPListen, "HTTP bind interface & port for UI")
 	rootCmd.Flags().StringVar(&config.Webroot, "webroot", config.Webroot, "Set the webroot for web UI & API")
 	rootCmd.Flags().StringVar(&config.UIAuthFile, "ui-auth-file", config.UIAuthFile, "A password file for web UI & API authentication")
+	rootCmd.Flags().StringSliceVar(&uiAdminUsersFlag, "ui-admin-users", uiAdminUsersFlag, "Comma-separated list of usernames with full access (not restricted by tag filter)")
 	rootCmd.Flags().StringVar(&config.UITLSCert, "ui-tls-cert", config.UITLSCert, "TLS certificate for web UI (HTTPS) - requires ui-tls-key")
 	rootCmd.Flags().StringVar(&config.UITLSKey, "ui-tls-key", config.UITLSKey, "TLS key for web UI (HTTPS) - requires ui-tls-cert")
 	rootCmd.Flags().StringVar(&server.AccessControlAllowOrigin, "api-cors", server.AccessControlAllowOrigin, "Set CORS origin(s) for the API, comma-separated (eg: example.com,foo.com)")
@@ -248,6 +252,17 @@ func initConfigFromEnv() {
 		config.Webroot = os.Getenv("MP_WEBROOT")
 	}
 	config.UIAuthFile = os.Getenv("MP_UI_AUTH_FILE")
+	// Populate admin users from flag then env var (env var takes precedence when set)
+	adminUsersList := uiAdminUsersFlag
+	if v := os.Getenv("MP_UI_ADMIN_USERS"); v != "" {
+		adminUsersList = strings.Split(v, ",")
+	}
+	for _, u := range adminUsersList {
+		u = strings.TrimSpace(strings.ToLower(u))
+		if u != "" {
+			auth.UIAdminUsers[u] = struct{}{}
+		}
+	}
 	if err := auth.SetUIAuth(os.Getenv("MP_UI_AUTH")); err != nil {
 		logger.Log().Error(err.Error())
 	}

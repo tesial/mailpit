@@ -1,0 +1,19 @@
+services:
+  mailpit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI & API
+    volumes:
+      - ./auth:/auth:ro
+    environment:
+      MP_UI_AUTH_FILE: /auth/ui.htpasswd
+      MP_UI_ADMIN_USERS: "admin"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      start_period: 10s
+      start_interval: 1s
+    restart: unless-stopped

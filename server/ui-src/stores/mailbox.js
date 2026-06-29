@@ -34,6 +34,7 @@ export const mailbox = reactive({
 	skipConfirmations: false, // skip modal confirmations for "Delete all" & "mark all read"
 	appInfo: {}, // application information
 	uiConfig: {}, // configuration for UI
+	authUser: "", // authenticated username (empty = unauthenticated or admin, no tag filter)
 	lastMessage: false, // return scrolling
 	defaultReleaseAddresses: storageToStringArray("defaultReleaseAddresses"), // default release addresses for released messages
 

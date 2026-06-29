@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/logger"
 	"github.com/axllent/mailpit/internal/storage"
 	"github.com/jhillyerd/enmime/v2"
@@ -41,8 +42,14 @@ func Thumbnail(w http.ResponseWriter, r *http.Request) {
 	//	  200: BinaryResponse
 	//    400: ErrorResponse
 
+	tag := auth.GetRequestUsername(r)
 	id := r.PathValue("id")
 	partID := r.PathValue("partID")
+
+	if !storage.MessageHasTag(id, tag) {
+		httpError(w, "message not found")
+		return
+	}
 
 	a, err := storage.GetAttachmentPart(id, partID)
 	if err != nil {

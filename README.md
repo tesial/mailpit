@@ -166,6 +166,12 @@ mailpit \
   --ui-admin-users admin                          # "admin" bypasses tag filter
 ```
 
+or
+
+```
+docker compose up -d --build
+```
+
 | What arrives | How it gets tagged | Who sees it |
 |---|---|---|
 | SMTP from app authenticating as `lambda` | Tagged `lambda` automatically | `lambda` and `admin` |

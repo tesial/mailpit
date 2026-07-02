@@ -11,6 +11,9 @@ services:
     environment:
       MP_UI_AUTH_FILE: /auth/ui.htpasswd
       MP_UI_ADMIN_USERS: "admin"
+      MP_SMTP_AUTH_FILE: /auth/smtp.htpasswd
+      MP_TAGS_USERNAME: true
+      MP_SMTP_AUTH_ALLOW_INSECURE: true
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 15s
